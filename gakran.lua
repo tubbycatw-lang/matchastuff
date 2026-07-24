@@ -7,7 +7,7 @@ local UIS = game:GetService("UserInputService")
 local SelectedFolder = nil
 local CycleKeybind = Enum.KeyCode.X
 
-local BASE = "https://raw.githubusercontent.com/tubbycatw-lang/match-tst-3/main/"
+local BASE = "https://raw.githubusercontent.com/tubbycatw-lang/matchastuff/main/"
 
 local ImportESP = loadstring(game:HttpGet(BASE .. "esp_utility.lua"))()
 
@@ -542,7 +542,7 @@ local AutoDodgeToggle = AP_Section:Toggle("Auto Dodge", true)
 
 local ParryDebugToggle = Config_Section:Toggle("Debug Parry", false)
 
-local AutoTargetNearest = AP_Section:Toggle("Auto Target Nearest", false)
+local AutoTargetNearest = AP_Section:Toggle("Auto Target Nearest", true)
 local MuliTarget = AP_Section:Toggle("Multiple Targets", true)
 
 local TargetFacingYou = nil
@@ -599,8 +599,19 @@ local function CreateFoldersSection()
 
     if game.Workspace:FindFirstChild("Players") then  
         FolderCombo:Set({"Players"})
+        SelectedFolder = "Players"
     elseif game.Workspace:FindFirstChild("Live") then 
         FolderCombo:Set({"Live"})
+        SelectedFolder = "Live"
+    elseif game.Workspace:FindFirstChild("Entities") then
+        FolderCombo:Set({"Entities"})
+        SelectedFolder = "Entities"
+    elseif game.Workspace:FindFirstChild("Characters") then
+        FolderCombo:Set({"Characters"})
+        SelectedFolder = "Characters"
+    elseif #folders > 0 then
+        FolderCombo:Set({folders[1]})
+        SelectedFolder = folders[1]
     end
 
     print("[UI] Folders Section Created")
