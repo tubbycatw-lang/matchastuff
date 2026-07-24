@@ -1519,7 +1519,15 @@ local function EvaluateAnimation(anim, character, localCharacter, localRoot, tar
     -- ANIMATION VALIDATION
     if not anim.AnimationId then return end
     local attackConfig = GameConfig[tostring(anim.AnimationId)]
-    if not attackConfig then return end
+    if not attackConfig then
+        -- Universal Fallback for new/unlisted move animation IDs
+        attackConfig = {
+            DisplayName = "UnknownMove",
+            Style = "Generic",
+            ReactionTime = DefaultReactionTime,
+            DefaultReactionTime = DefaultReactionTime
+        }
+    end
     
     local animKey = anim.Address or anim
     currentActiveIds[animKey] = true
