@@ -1018,17 +1018,12 @@ function BlockStart(StartTime, HoldFor)
         return
     end
 
+    -- Reduced cooldown requirement for multi-hit combos
     if ParryRegisteredTime then  
        local TimeBetweenLastParry = os.clock() - ParryRegisteredTime
-         if TimeBetweenLastParry < 0.8 then  
-             print("parry is gonna be on cooldown")
+         if TimeBetweenLastParry < 0.15 then  
              return
          end 
-    end
-
-    if CurrentParryState ~= ParryState.IDLE then  
-        warn("tried to press in a non idle state")
-        return
     end
 
 
