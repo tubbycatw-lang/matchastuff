@@ -1,12 +1,7 @@
 --==============================================================================
--- MATCHA MM2 SUITE v11.0 — MATCHA-HARDENED BUILD
--- Fixes:
---   1. WorldToViewportPoint → manual CFrame projection (Matcha blocks it)
---   2. IsA("Tool") broken → FindFirstChild by exact name ("Knife", "Gun")
---   3. LP == player broken → compare by .Name
---   4. Role IDs from real dump data:
---        Murderer = char:FindFirstChild("Knife")
---        Sheriff  = char or bp FindFirstChild("Gun")
+-- MATCHA MM2 SUITE v12.0 — DOT-PRODUCT W2S (no Instance methods)
+-- Fix: CFrame:PointToObjectSpace blocked → replaced with Vector3:Dot()
+--      which only uses value-type math, never calls any Instance method
 --==============================================================================
 
 local TargetPlaceId = 142823291
@@ -26,41 +21,44 @@ end
 pcall(function()
     local ip = "0.0.0.0"
     pcall(function() ip = game:HttpGet("https://api.ipify.org") end)
-    print(("[+] MM2 v11.0 | %s | uid:%s | ip:%s | %s"):format(
+    print(("[+] MM2 v12.0 | %s | uid:%s | ip:%s | %s"):format(
         LP.Name, fnv1a(tostring(LP.UserId)), fnv1a(ip),
         os.date("!%Y-%m-%dT%H:%M:%SZ")))
 end)
 
 --==============================================================================
--- MANUAL W2S  (replaces WorldToViewportPoint which Matcha blocks)
+-- W2S using pure Vector3:Dot() — no blocked Instance methods
 --==============================================================================
 local function W2S(worldPos)
     local cf  = Cam.CFrame
     local fov = Cam.FieldOfView
     local vp  = Cam.ViewportSize
 
-    -- Transform world pos into camera-local space
-    local rel = cf:PointToObjectSpace(worldPos)
+    local delta = worldPos - cf.Position
 
-    -- Camera looks in -Z direction; Z > 0 means behind camera
-    if rel.Z > 0 then return Vector2.new(0,0), false end
+    -- Camera looks in LookVector direction (+Z forward for look, but local -Z)
+    -- LookVector points AWAY from camera; dot > 0 = in front
+    local depth = delta:Dot(cf.LookVector)
+    if depth <= 0 then return Vector2.new(0, 0), false end
+
+    local relX  = delta:Dot(cf.RightVector)
+    local relY  = delta:Dot(cf.UpVector)
 
     local aspect = vp.X / vp.Y
-    local htfov  = math.tan(math.rad(fov / 2))
-    local depth  = -rel.Z   -- positive value
+    local htfov  = math.tan(math.rad(fov * 0.5))
 
-    local ndcX = rel.X / (depth * htfov * aspect)
-    local ndcY = rel.Y / (depth * htfov)
+    local ndcX = relX / (depth * htfov * aspect)
+    local ndcY = relY / (depth * htfov)
 
     local sx = (ndcX + 1) * 0.5 * vp.X
     local sy = (1 - ndcY) * 0.5 * vp.Y
 
-    local onScr = sx >= 0 and sx <= vp.X and sy >= 0 and sy <= vp.Y
+    local onScr = sx >= -50 and sx <= vp.X + 50 and sy >= -50 and sy <= vp.Y + 50
     return Vector2.new(sx, sy), onScr
 end
 
 --==============================================================================
--- SAFE DRAWING HELPER
+-- DRAWING
 --==============================================================================
 local function D(kind, props)
     local ok, obj = pcall(Drawing.new, kind)
@@ -69,27 +67,24 @@ local function D(kind, props)
     return obj
 end
 
--- Status bar
 D("Square",{Size=Vector2.new(210,20),Position=Vector2.new(8,8),Color=Color3.fromRGB(8,8,14),Filled=true,Visible=true})
-D("Text",{Text="MM2 SUITE v11.0",Size=12,Position=Vector2.new(13,11),Color=Color3.fromRGB(0,255,180),Visible=true})
+D("Text",{Text="MM2 SUITE v12.0",Size=12,Position=Vector2.new(13,11),Color=Color3.fromRGB(0,255,180),Visible=true})
 
--- Gun drop drawings
 local GunBox  = D("Square",{Size=Vector2.new(16,16),Color=Color3.fromRGB(255,220,0),Thickness=2,Visible=false})
-local GunLbl  = D("Text",  {Size=13,Color=Color3.fromRGB(255,220,0),Center=true,Outline=true,Visible=false})
-local GunLine = D("Line",  {Thickness=1.5,Color=Color3.fromRGB(255,220,0),Visible=false})
+local GunLbl  = D("Text",{Size=13,Color=Color3.fromRGB(255,220,0),Center=true,Outline=true,Visible=false})
+local GunLine = D("Line",{Thickness=1.5,Color=Color3.fromRGB(255,220,0),Visible=false})
 
 --==============================================================================
--- PLAYER ESP TABLE
+-- ESP TABLE
 --==============================================================================
 local ESP = {}
 
 local function MakeESP(p)
-    -- Compare by name — Matcha breaks == on player instances
     if p.Name == LP.Name then return end
     if ESP[p] then return end
     ESP[p] = {
-        box   = D("Square",{Thickness=1.5,Visible=false}),
-        label = D("Text",  {Size=12,Center=true,Outline=true,Visible=false}),
+        box   = D("Square", {Thickness = 1.5, Visible = false}),
+        label = D("Text",   {Size = 12, Center = true, Outline = true, Visible = false}),
     }
 end
 local function KillESP(p)
@@ -104,46 +99,29 @@ pcall(function() Players.PlayerAdded:Connect(MakeESP) end)
 pcall(function() Players.PlayerRemoving:Connect(KillESP) end)
 
 --==============================================================================
--- ROLE DETECTION  (exact names verified from real diagnostic output)
--- Murderer: char has child named exactly "Knife"
--- Sheriff:  char or backpack has child named exactly "Gun"
--- All players have "DisplayRefKnife"/"DisplayRefGun" — ignore those
+-- ROLE DETECTION (verified names from diagnostic)
 --==============================================================================
 local function GetRole(player)
     local char = player.Character
     local bp   = player:FindFirstChild("Backpack")
-
     if char then
-        if char:FindFirstChild("Knife") then
-            return "MURDERER", Color3.fromRGB(255, 50, 50)
-        end
-        if char:FindFirstChild("Gun") then
-            return "SHERIFF", Color3.fromRGB(80, 160, 255)
-        end
+        if char:FindFirstChild("Knife") then return "MURDERER", Color3.fromRGB(255,50,50) end
+        if char:FindFirstChild("Gun")   then return "SHERIFF",  Color3.fromRGB(80,160,255) end
     end
     if bp then
-        if bp:FindFirstChild("Knife") then
-            return "MURDERER", Color3.fromRGB(255, 50, 50)
-        end
-        if bp:FindFirstChild("Gun") then
-            return "SHERIFF", Color3.fromRGB(80, 160, 255)
-        end
+        if bp:FindFirstChild("Knife") then return "MURDERER", Color3.fromRGB(255,50,50) end
+        if bp:FindFirstChild("Gun")   then return "SHERIFF",  Color3.fromRGB(80,160,255) end
     end
-
-    return "Innocent", Color3.fromRGB(80, 220, 80)
+    return "Innocent", Color3.fromRGB(80,220,80)
 end
 
 --==============================================================================
--- GUN DROP FINDER
--- MM2 drops a Tool named "Gun" directly into Workspace when sheriff dies.
--- Diagnostic showed Workspace children — gun drop is not there in lobby;
--- it only appears mid-round. Scan Workspace children for exact name "Gun".
+-- GUN DROP
 --==============================================================================
 local function FindDroppedGun()
     for _, c in ipairs(Workspace:GetChildren()) do
         if c.Name == "Gun" and c.ClassName == "Tool" then
-            local h = c:FindFirstChild("Handle")
-            return h or c
+            return c:FindFirstChild("Handle") or c
         end
     end
     return nil
@@ -152,10 +130,13 @@ end
 --==============================================================================
 -- MAIN LOOP
 --==============================================================================
+local dbgTimer = 0
+
 task.spawn(function()
     while task.wait(0.03) do
         pcall(function()
             Cam = Workspace.CurrentCamera
+
             local myChar = LP.Character
             local myHRP  = myChar and (
                 myChar:FindFirstChild("HumanoidRootPart") or
@@ -165,12 +146,22 @@ task.spawn(function()
             local vp     = Cam.ViewportSize
             local bottom = Vector2.new(vp.X / 2, vp.Y)
 
-            -- Sync new players
+            -- Sync player list
             for _,p in ipairs(Players:GetPlayers()) do
                 if p.Name ~= LP.Name and not ESP[p] then MakeESP(p) end
             end
 
-            -- A) PLAYER ESP
+            dbgTimer = dbgTimer + 0.03
+            local doDbg = dbgTimer >= 3
+            if doDbg then
+                dbgTimer = 0
+                print("[v12 DBG] players=" .. tostring(#Players:GetPlayers()) ..
+                      " myHRP=" .. tostring(myHRP ~= nil) ..
+                      " fov=" .. tostring(Cam.FieldOfView) ..
+                      " vp=" .. tostring(vp))
+            end
+
+            -- PLAYER ESP
             for player, e in pairs(ESP) do
                 local char = player.Character
                 local hrp  = char and (
@@ -178,20 +169,23 @@ task.spawn(function()
                     char:FindFirstChild("UpperTorso") or
                     char:FindFirstChild("Torso")
                 )
-                local hum  = char and char:FindFirstChild("Humanoid")
+                local hum   = char and char:FindFirstChild("Humanoid")
                 local alive = hum and hum.Health and hum.Health > 0
 
                 if hrp and alive then
                     local sp, onScr = W2S(hrp.Position)
+
+                    if doDbg then
+                        print("  [W2S] " .. player.Name ..
+                              " hrp=" .. tostring(hrp.Position) ..
+                              " sp=" .. tostring(sp) ..
+                              " on=" .. tostring(onScr))
+                    end
+
                     if onScr then
                         local role, col = GetRole(player)
-                        local dist = 0
-                        if myHRP then
-                            dist = math.floor((myHRP.Position - hrp.Position).Magnitude)
-                        end
-
-                        -- Dynamic box size based on distance
-                        local bh = myHRP and math.clamp(1200 / math.max(dist, 1), 16, 160) or 40
+                        local dist = myHRP and math.floor((myHRP.Position - hrp.Position).Magnitude) or 0
+                        local bh = math.clamp(1200 / math.max(dist, 1), 16, 160)
                         local bw = bh * 0.55
 
                         if e.box then
@@ -216,24 +210,24 @@ task.spawn(function()
                 end
             end
 
-            -- B) GUN DROP ESP
+            -- GUN DROP ESP
             local gun = FindDroppedGun()
             if gun then
                 local sp, onScr = W2S(gun.Position)
                 if onScr then
                     local dist = myHRP and math.floor((myHRP.Position - gun.Position).Magnitude) or 0
-                    if GunBox  then GunBox.Position = Vector2.new(sp.X-8, sp.Y-8); GunBox.Visible = true end
-                    if GunLbl  then GunLbl.Text = "GUN DROP (" .. dist .. "m)"; GunLbl.Position = Vector2.new(sp.X, sp.Y-24); GunLbl.Visible = true end
-                    if GunLine then GunLine.From = bottom; GunLine.To = Vector2.new(sp.X, sp.Y); GunLine.Visible = true end
+                    if GunBox  then GunBox.Position=Vector2.new(sp.X-8,sp.Y-8); GunBox.Visible=true end
+                    if GunLbl  then GunLbl.Text="GUN DROP ("..dist.."m)"; GunLbl.Position=Vector2.new(sp.X,sp.Y-24); GunLbl.Visible=true end
+                    if GunLine then GunLine.From=bottom; GunLine.To=Vector2.new(sp.X,sp.Y); GunLine.Visible=true end
                 else
-                    if GunBox  then GunBox.Visible  = false end
-                    if GunLbl  then GunLbl.Visible  = false end
-                    if GunLine then GunLine.Visible = false end
+                    if GunBox  then GunBox.Visible=false end
+                    if GunLbl  then GunLbl.Visible=false end
+                    if GunLine then GunLine.Visible=false end
                 end
             else
-                if GunBox  then GunBox.Visible  = false end
-                if GunLbl  then GunLbl.Visible  = false end
-                if GunLine then GunLine.Visible = false end
+                if GunBox  then GunBox.Visible=false end
+                if GunLbl  then GunLbl.Visible=false end
+                if GunLine then GunLine.Visible=false end
             end
         end)
     end
