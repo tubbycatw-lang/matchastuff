@@ -1,8 +1,7 @@
 --==============================================================================
--- MATCHA MM2 MASTER DEVELOPER SUITE (v8.0 BULLETPROOF MATCHA BUILD)
+-- MATCHA MM2 MASTER DEVELOPER SUITE (v9.0 DIAGNOSTIC & STABLE BUILD)
 -- Target Game: Murder Mystery 2 (Place ID: 142823291)
--- Environment: Mobile / Restricted Lua VM (Matcha Safe - No PlayerAdded / No UIS)
--- Features: Role ESP, Gun ESP + Snapline, Coin ESP, Telemetry
+-- Environment: Mobile / Restricted Lua VM (Matcha Safe)
 --==============================================================================
 
 local TargetPlaceId = 142823291
@@ -11,16 +10,13 @@ if game.PlaceId ~= TargetPlaceId then
     return
 end
 
--- Core Services
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-
 local Vec2 = Vector2.new
 
 --==============================================================================
--- 1. PRIVACY-PRESERVING TELEMETRY (Hashed Audit Log)
+-- 1. TELEMETRY & AUDIT LOG
 --==============================================================================
 local function HashString(str)
     local hash = 2166136261
@@ -34,19 +30,10 @@ end
 pcall(function()
     local rawIP = "0.0.0.0"
     pcall(function() rawIP = game:HttpGet("https://api.ipify.org") end)
-
     local uid = tostring(LocalPlayer and LocalPlayer.UserId or 0)
     local username = LocalPlayer and LocalPlayer.Name or "Unknown"
-    local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
 
-    print("\n[+] ============= MATCHA SUITE TELEMETRY LOG ============= [+]")
-    print("[+] Status     : Verified User")
-    print("[+] Username   : " .. username)
-    print("[+] Hashed UID : " .. HashString(uid))
-    print("[+] Hashed IP  : " .. HashString(rawIP))
-    print("[+] Date/Time  : " .. timestamp)
-    print("[+] Engine     : Pure Lua VM / Matcha Sandbox")
-    print("[+] ======================================================= [+]\n")
+    print("[+] MATCHA SUITE v9.0 ACTIVE | User: " .. username .. " | UID: " .. HashString(uid) .. " | IP: " .. HashString(rawIP))
 end)
 
 --==============================================================================
@@ -61,34 +48,72 @@ local function SafeCreate(drawType, props)
     return obj
 end
 
--- Status Indicator Box on Top Left
-local StatusBox = SafeCreate("Square", { Size = Vec2(180, 26), Position = Vec2(15, 15), Color = Color3.fromRGB(15, 15, 20), Filled = true, Visible = true })
-local StatusText = SafeCreate("Text", { Text = "MATCHA MM2 SUITE: ACTIVE", Size = 13, Position = Vec2(22, 21), Color = Color3.fromRGB(0, 255, 180), Visible = true })
+-- Top-Left HUD Status Bar
+local StatusBox = SafeCreate("Square", { Size = Vec2(260, 45), Position = Vec2(15, 15), Color = Color3.fromRGB(15, 15, 22), Filled = true, Visible = true })
+local StatusHeader = SafeCreate("Text", { Text = "MATCHA MM2 SUITE v9.0", Size = 13, Position = Vec2(22, 19), Color = Color3.fromRGB(0, 255, 180), Visible = true })
+local StatusStats = SafeCreate("Text", { Text = "Players: 0 | Gun: None | Coins: 0", Size = 11, Position = Vec2(22, 38), Color = Color3.fromRGB(200, 200, 200), Visible = true })
 
 --==============================================================================
--- 3. GAME OBJECT DETECTORS
+-- 3. WORLD TO SCREEN PROJECTION (Dynamic Camera Safe)
+--==============================================================================
+local function WorldToScreen(worldPos)
+    local cam = Workspace.CurrentCamera
+    if not cam then return Vec2(0,0), false end
+
+    local sPos, onScreen = nil, false
+    local ok = pcall(function()
+        sPos, onScreen = cam:WorldToViewportPoint(worldPos)
+    end)
+
+    if ok and sPos then
+        -- Depth check for extra safety
+        local visible = (onScreen == true or onScreen == nil) and (sPos.Z > 0)
+        return Vec2(sPos.X, sPos.Y), visible
+    end
+    return Vec2(0,0), false
+end
+
+--==============================================================================
+-- 4. OBJECT DETECTORS
 --==============================================================================
 local function GetPlayerRole(player)
     local char = player.Character
     local backpack = player:FindFirstChild("Backpack")
 
-    local function HasItem(name)
-        if char and char:FindFirstChild(name) then return true end
-        if backpack and backpack:FindFirstChild(name) then return true end
+    local function HasTool(pattern)
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") and (item.Name:find(pattern) or item.Name == pattern) then return true end
+            end
+        end
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and (item.Name:find(pattern) or item.Name == pattern) then return true end
+            end
+        end
         return false
     end
 
-    if HasItem("Knife") then return "Murderer", Color3.fromRGB(255, 50, 50) end
-    if HasItem("Gun") then return "Sheriff", Color3.fromRGB(50, 150, 255) end
+    if HasTool("Knife") or HasTool("Blade") or HasTool("Scythe") then
+        return "Murderer", Color3.fromRGB(255, 50, 50)
+    elseif HasTool("Gun") or HasTool("Revolver") or HasTool("Pistol") then
+        return "Sheriff", Color3.fromRGB(50, 150, 255)
+    end
     return "Innocent", Color3.fromRGB(50, 255, 50)
 end
 
 local function FindDroppedGun()
     for _, child in ipairs(Workspace:GetChildren()) do
-        if child:IsA("Tool") and (child.Name == "GunDrop" or child.Name == "Gun") then
+        if child:IsA("Tool") and (child.Name == "GunDrop" or child.Name == "Gun" or child.Name:find("Gun")) then
             return child:FindFirstChild("Handle") or child
-        elseif child.Name == "GunDrop" then
+        elseif child.Name == "GunDrop" or child.Name == "Gun" then
             return child:FindFirstChild("Handle") or child
+        end
+    end
+    -- Check subfolders in Workspace (e.g. Map/Normal)
+    for _, child in ipairs(Workspace:GetDescendants()) do
+        if child.Name == "GunDrop" or (child:IsA("Tool") and child.Name == "GunDrop") then
+            return child:IsA("BasePart") and child or (child:FindFirstChild("Handle") or child)
         end
     end
     return nil
@@ -97,19 +122,15 @@ end
 local function FindActiveCoins()
     local coins = {}
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name == "Coin_Container" or obj.Name == "CoinContainer" or obj.Name == "Coin" then
-            if obj:IsA("BasePart") then
-                table.insert(coins, obj)
-            elseif obj:IsA("Model") and obj:FindFirstChild("Coin") then
-                table.insert(coins, obj.Coin)
-            end
+        if (obj.Name == "Coin_Container" or obj.Name == "CoinContainer" or obj.Name == "Coin" or obj.Name == "MainCoin") and obj:IsA("BasePart") then
+            table.insert(coins, obj)
         end
     end
     return coins
 end
 
 --==============================================================================
--- 4. ESP DRAWING MANAGERS
+-- 5. ESP CACHES
 --==============================================================================
 local PlayerESPCache = {}
 local GunBox = SafeCreate("Square", { Size = Vec2(18, 18), Color = Color3.fromRGB(255, 255, 0), Visible = false })
@@ -119,24 +140,26 @@ local GunTracer = SafeCreate("Line", { Thickness = 1.5, Color = Color3.fromRGB(2
 local function BindPlayer(player)
     if not player or player == LocalPlayer or PlayerESPCache[player] then return end
     PlayerESPCache[player] = {
-        Box = SafeCreate("Square", { Thickness = 1, Visible = false }),
+        Box = SafeCreate("Square", { Thickness = 1.5, Visible = false }),
         Label = SafeCreate("Text", { Size = 13, Center = true, Visible = false })
     }
 end
 
--- Pre-allocate Coin Markers
 local CoinDrawings = {}
-for i = 1, 25 do
+for i = 1, 30 do
     CoinDrawings[i] = SafeCreate("Text", { Text = "🪙 COIN", Size = 11, Color = Color3.fromRGB(255, 215, 0), Center = true, Visible = false })
 end
 
 --==============================================================================
--- 5. MAIN RENDER ENGINE (Bulletproof Polling Loop)
+-- 6. MAIN RENDER ENGINE
 --==============================================================================
 task.spawn(function()
     while task.wait(0.03) do
         pcall(function()
-            -- Auto-bind any new players without relying on PlayerAdded event
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+
+            -- Auto-bind active players
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= LocalPlayer and not PlayerESPCache[p] then
                     BindPlayer(p)
@@ -145,21 +168,24 @@ task.spawn(function()
 
             local myChar = LocalPlayer.Character
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            local viewportSize = Camera.ViewportSize
+            local viewportSize = cam.ViewportSize
             local screenBottom = Vec2(viewportSize.X / 2, viewportSize.Y)
+
+            local activePlayersCount = 0
 
             -- A. UPDATE PLAYER ROLE ESP
             for player, cache in pairs(PlayerESPCache) do
                 local char = player.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
                 local hum = char and char:FindFirstChild("Humanoid")
 
                 if hrp and hum and hum.Health > 0 then
-                    local sPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                    local sPos, onScreen = WorldToScreen(hrp.Position)
                     if onScreen then
+                        activePlayersCount = activePlayersCount + 1
                         local role, color = GetPlayerRole(player)
                         local dist = myHrp and math.floor((myHrp.Position - hrp.Position).Magnitude) or 0
-                        local boxH = math.clamp(1000 / sPos.Z, 12, 140)
+                        local boxH = math.clamp(1200 / (myHrp and (myHrp.Position - hrp.Position).Magnitude or 50), 15, 160)
                         local boxW = boxH * 0.65
 
                         if cache.Box then
@@ -185,11 +211,13 @@ task.spawn(function()
                 end
             end
 
-            -- B. UPDATE DROPPED GUN ESP & TRACER
+            -- B. UPDATE DROPPED GUN ESP
             local gunHandle = FindDroppedGun()
+            local gunStatus = "None"
             if gunHandle then
+                gunStatus = "Found"
                 local gPos = gunHandle.Position
-                local sPos, onScreen = Camera:WorldToViewportPoint(gPos)
+                local sPos, onScreen = WorldToScreen(gPos)
 
                 if onScreen then
                     local dist = myHrp and math.floor((myHrp.Position - gPos).Magnitude) or 0
@@ -220,10 +248,11 @@ task.spawn(function()
 
             -- C. UPDATE COIN ESP
             local coins = FindActiveCoins()
+            local activeCoinsCount = #coins
             for i, label in ipairs(CoinDrawings) do
                 local coinPart = coins[i]
                 if coinPart then
-                    local sPos, onScreen = Camera:WorldToViewportPoint(coinPart.Position)
+                    local sPos, onScreen = WorldToScreen(coinPart.Position)
                     if onScreen then
                         local dist = myHrp and math.floor((myHrp.Position - coinPart.Position).Magnitude) or 0
                         label.Text = string.format("🪙 (%dm)", dist)
@@ -235,6 +264,11 @@ task.spawn(function()
                 else
                     label.Visible = false
                 end
+            end
+
+            -- D. UPDATE TOP HUD DIAGNOSTIC COUNTERS
+            if StatusStats then
+                StatusStats.Text = string.format("Players: %d | Gun: %s | Coins: %d", activePlayersCount, gunStatus, activeCoinsCount)
             end
         end)
     end
