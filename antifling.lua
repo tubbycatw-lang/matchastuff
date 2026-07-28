@@ -1,6 +1,5 @@
 --==============================================================================
--- MATCHA STANDALONE ANTI-FLING (Restored Stable Build)
--- Pure zero-error passthrough anti-fling loop
+-- MATCHA STANDALONE ANTI-FLING (Pure Core — No UI Dependencies)
 --==============================================================================
 
 local Players    = game:GetService("Players")
@@ -21,12 +20,11 @@ local function antiFlingLoop()
     end)
 end
 
-pcall(function()
-    RunService.Stepped:Connect(antiFlingLoop)
-end)
+pcall(function() RunService.Stepped:Connect(antiFlingLoop) end)
 
 task.spawn(function()
-    while task.wait(0.01) do
+    while true do
+        task.wait(0.01)
         antiFlingLoop()
     end
 end)
