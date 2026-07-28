@@ -1,13 +1,14 @@
 --==============================================================================
--- MATCHA EXACT ANTI-FLING (Rebuilt from shystemcito)
--- No MatchaUI, No Loader, Pure Anti-Fling Execution
+-- MATCHA PLAYER-ONLY ANTI-FLING (Clean & Independent)
+-- Makes OTHER PLAYERS phase through you without falling through floors or walking through walls.
+-- Never touches LocalPlayer character collisions.
 --==============================================================================
 
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LP         = Players.LocalPlayer
 
--- Safe Header Status
+-- Safe Header Indicator
 local function D(kind, props)
     local ok, obj = pcall(Drawing.new, kind)
     if not ok then return nil end
@@ -15,22 +16,18 @@ local function D(kind, props)
     return obj
 end
 
-D("Square",{Size=Vector2.new(160,20),Position=Vector2.new(8,8),Color=Color3.fromRGB(8,8,14),Filled=true,Visible=true})
-D("Text",{Text="ANTI-FLING ACTIVE",Size=12,Position=Vector2.new(13,11),Color=Color3.fromRGB(0,255,180),Visible=true})
+D("Square",{Size=Vector2.new(180,20),Position=Vector2.new(8,8),Color=Color3.fromRGB(8,8,14),Filled=true,Visible=true})
+D("Text",{Text="ANTI-FLING ACTIVE (PASSTHROUGH)",Size=11,Position=Vector2.new(12,11),Color=Color3.fromRGB(0,255,180),Visible=true})
 
--- Exact logic from shystemcito's AntiFling
+-- Player-Only Collision Disabler
 local function antiFlingLoop()
     pcall(function()
-        for _, player in pairs(Players:GetPlayers()) do
+        for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LP and player.Character then
-                for _, part in pairs(player.Character:GetChildren()) do
+                for _, part in ipairs(player.Character:GetDescendants()) do
                     if part:IsA("BasePart") then
                         part.CanCollide = false
-                        part.Velocity = Vector3.new(0, 0, 0)
-                        part.RotVelocity = Vector3.new(0, 0, 0)
-                        pcall(function()
-                            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-                        end)
+                        part.CanTouch = false
                     end
                 end
             end
@@ -38,14 +35,14 @@ local function antiFlingLoop()
     end)
 end
 
--- Use task.spawn polling since RunService.Stepped / Heartbeat can freeze on Matcha
+-- Fast spawn loop for executor compatibility
 task.spawn(function()
     while task.wait(0.01) do
         antiFlingLoop()
     end
 end)
 
--- Also attach to Stepped if available
+-- Stepped event hook if supported
 pcall(function()
     RunService.Stepped:Connect(antiFlingLoop)
 end)
