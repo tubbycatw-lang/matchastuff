@@ -1,10 +1,6 @@
 --==============================================================================
--- MATCHA ANTI-FLING PLUS (Premium UI Suite)
--- Built for Matcha External LuaVM
--- Features:
---   1. Passthrough Anti-Fling (RunService.Stepped, Zero-Yield)
---   2. Heavy Body Density Toggle
---   3. Smooth Matcha UI Overlay
+-- MATCHA ANTI-FLING PLUS (Safe PhysicalProperties Build)
+-- Fixes: Matcha doesn't support PhysicalProperties.new -> wrapped in pcall
 --==============================================================================
 
 local Players    = game:GetService("Players")
@@ -12,7 +8,7 @@ local RunService = game:GetService("RunService")
 local LP         = Players.LocalPlayer
 
 -- Load UI Library
-local ok = pcall(function()
+pcall(function()
     loadstring(game:HttpGet("https://scripts.wabisabi.mom/wabi-sabi-ui-lib.lua"))()
 end)
 
@@ -20,7 +16,12 @@ local Library = WabiSabi
 
 local antiFlingActive = true
 local heavyPhysActive = false
-local HeavyPhys = PhysicalProperties.new(100, 1, 1, 1, 1)
+
+-- Safe PhysicalProperties creation
+local HeavyPhys = nil
+pcall(function()
+    HeavyPhys = PhysicalProperties.new(100, 1, 1, 1, 1)
+end)
 
 -- Core Passthrough Anti-Fling (Stepped, Zero Yield)
 local function antiFlingStep()
@@ -40,8 +41,8 @@ local function antiFlingStep()
             end
         end
 
-        -- Heavy Mass Density on LocalPlayer if toggled
-        if heavyPhysActive and LP.Character then
+        -- Heavy Mass Density on LocalPlayer if toggled and supported by executor
+        if heavyPhysActive and HeavyPhys and LP.Character then
             for _, part in ipairs(LP.Character:GetChildren()) do
                 if part:IsA("BasePart") then
                     pcall(function() part.CustomPhysicalProperties = HeavyPhys end)
@@ -69,7 +70,7 @@ if Library then
     pcall(function()
         local Window = Library:CreateWindow({
             Title    = "Anti-Fling Plus",
-            SubTitle = "v2.0",
+            SubTitle = "v2.1",
             Size     = Vector2.new(460, 280),
             Resize   = true,
         })
