@@ -1,7 +1,9 @@
 --==============================================================================
--- MATCHA MM2 SUITE v12.0 — DOT-PRODUCT W2S (no Instance methods)
--- Fix: CFrame:PointToObjectSpace blocked → replaced with Vector3:Dot()
---      which only uses value-type math, never calls any Instance method
+-- MATCHA MM2 SUITE v13.0 — INTEGRATED ANTI-FLING & DOT-PRODUCT W2S
+-- Includes:
+--   1. Clean Anti-Fling (Disables player collision & suppresses fling physics)
+--   2. MM2 Role ESP & Gun Drop Tracer
+--   3. Matcha-safe W2S Math & Status Header
 --==============================================================================
 
 local TargetPlaceId = 142823291
@@ -21,7 +23,7 @@ end
 pcall(function()
     local ip = "0.0.0.0"
     pcall(function() ip = game:HttpGet("https://api.ipify.org") end)
-    print(("[+] MM2 v12.0 | %s | uid:%s | ip:%s | %s"):format(
+    print(("[+] MM2 v13.0 | %s | uid:%s | ip:%s | %s"):format(
         LP.Name, fnv1a(tostring(LP.UserId)), fnv1a(ip),
         os.date("!%Y-%m-%dT%H:%M:%SZ")))
 end)
@@ -36,8 +38,6 @@ local function W2S(worldPos)
 
     local delta = worldPos - cf.Position
 
-    -- Camera looks in LookVector direction (+Z forward for look, but local -Z)
-    -- LookVector points AWAY from camera; dot > 0 = in front
     local depth = delta:Dot(cf.LookVector)
     if depth <= 0 then return Vector2.new(0, 0), false end
 
@@ -58,7 +58,7 @@ local function W2S(worldPos)
 end
 
 --==============================================================================
--- DRAWING
+-- DRAWING HELPER
 --==============================================================================
 local function D(kind, props)
     local ok, obj = pcall(Drawing.new, kind)
@@ -67,12 +67,40 @@ local function D(kind, props)
     return obj
 end
 
-D("Square",{Size=Vector2.new(210,20),Position=Vector2.new(8,8),Color=Color3.fromRGB(8,8,14),Filled=true,Visible=true})
-D("Text",{Text="MM2 SUITE v12.0",Size=12,Position=Vector2.new(13,11),Color=Color3.fromRGB(0,255,180),Visible=true})
+-- Clean Minimal Header Status
+D("Square",{Size=Vector2.new(240,20),Position=Vector2.new(8,8),Color=Color3.fromRGB(8,8,14),Filled=true,Visible=true})
+D("Text",{Text="MM2 SUITE v13.0 | ANTI-FLING ON",Size=12,Position=Vector2.new(13,11),Color=Color3.fromRGB(0,255,180),Visible=true})
 
 local GunBox  = D("Square",{Size=Vector2.new(16,16),Color=Color3.fromRGB(255,220,0),Thickness=2,Visible=false})
 local GunLbl  = D("Text",{Size=13,Color=Color3.fromRGB(255,220,0),Center=true,Outline=true,Visible=false})
 local GunLine = D("Line",{Thickness=1.5,Color=Color3.fromRGB(255,220,0),Visible=false})
+
+--==============================================================================
+-- ANTI-FLING LOGIC (Clean & Lightweight, no ugly GUI)
+--==============================================================================
+local function ProcessAntiFling()
+    pcall(function()
+        local myChar = LP.Character
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name ~= LP.Name and p.Character then
+                for _, part in ipairs(p.Character:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        -- Clamp fling angular/linear velocities
+                        pcall(function()
+                            if part.AssemblyAngularVelocity.Magnitude > 30 then
+                                part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            end
+                            if part.AssemblyLinearVelocity.Magnitude > 150 then
+                                part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end)
+end
 
 --==============================================================================
 -- ESP TABLE
@@ -99,7 +127,7 @@ pcall(function() Players.PlayerAdded:Connect(MakeESP) end)
 pcall(function() Players.PlayerRemoving:Connect(KillESP) end)
 
 --==============================================================================
--- ROLE DETECTION (verified names from diagnostic)
+-- ROLE DETECTION
 --==============================================================================
 local function GetRole(player)
     local char = player.Character
@@ -130,12 +158,13 @@ end
 --==============================================================================
 -- MAIN LOOP
 --==============================================================================
-local dbgTimer = 0
-
 task.spawn(function()
     while task.wait(0.03) do
         pcall(function()
             Cam = Workspace.CurrentCamera
+
+            -- Run Anti-Fling continuously
+            ProcessAntiFling()
 
             local myChar = LP.Character
             local myHRP  = myChar and (
@@ -151,16 +180,6 @@ task.spawn(function()
                 if p.Name ~= LP.Name and not ESP[p] then MakeESP(p) end
             end
 
-            dbgTimer = dbgTimer + 0.03
-            local doDbg = dbgTimer >= 3
-            if doDbg then
-                dbgTimer = 0
-                print("[v12 DBG] players=" .. tostring(#Players:GetPlayers()) ..
-                      " myHRP=" .. tostring(myHRP ~= nil) ..
-                      " fov=" .. tostring(Cam.FieldOfView) ..
-                      " vp=" .. tostring(vp))
-            end
-
             -- PLAYER ESP
             for player, e in pairs(ESP) do
                 local char = player.Character
@@ -174,13 +193,6 @@ task.spawn(function()
 
                 if hrp and alive then
                     local sp, onScr = W2S(hrp.Position)
-
-                    if doDbg then
-                        print("  [W2S] " .. player.Name ..
-                              " hrp=" .. tostring(hrp.Position) ..
-                              " sp=" .. tostring(sp) ..
-                              " on=" .. tostring(onScr))
-                    end
 
                     if onScr then
                         local role, col = GetRole(player)
