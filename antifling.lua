@@ -1,6 +1,6 @@
 --==============================================================================
--- MATCHA ANTI-FLING PLUS (Safe PhysicalProperties Build)
--- Fixes: Matcha doesn't support PhysicalProperties.new -> wrapped in pcall
+-- MATCHA ANTI-FLING PLUS (v2.2 Stable)
+-- Completely removed PhysicalProperties to prevent Matcha LuaVM errors
 --==============================================================================
 
 local Players    = game:GetService("Players")
@@ -15,13 +15,6 @@ end)
 local Library = WabiSabi
 
 local antiFlingActive = true
-local heavyPhysActive = false
-
--- Safe PhysicalProperties creation
-local HeavyPhys = nil
-pcall(function()
-    HeavyPhys = PhysicalProperties.new(100, 1, 1, 1, 1)
-end)
 
 -- Core Passthrough Anti-Fling (Stepped, Zero Yield)
 local function antiFlingStep()
@@ -37,15 +30,6 @@ local function antiFlingStep()
                     if part:IsA("BasePart") then
                         part.CanCollide = false
                     end
-                end
-            end
-        end
-
-        -- Heavy Mass Density on LocalPlayer if toggled and supported by executor
-        if heavyPhysActive and HeavyPhys and LP.Character then
-            for _, part in ipairs(LP.Character:GetChildren()) do
-                if part:IsA("BasePart") then
-                    pcall(function() part.CustomPhysicalProperties = HeavyPhys end)
                 end
             end
         end
@@ -70,8 +54,8 @@ if Library then
     pcall(function()
         local Window = Library:CreateWindow({
             Title    = "Anti-Fling Plus",
-            SubTitle = "v2.1",
-            Size     = Vector2.new(460, 280),
+            SubTitle = "v2.2",
+            Size     = Vector2.new(450, 220),
             Resize   = true,
         })
 
@@ -83,7 +67,7 @@ if Library then
             Default  = true,
             Callback = function(value)
                 antiFlingActive = value
-                if Library.Notify then
+                if Library and Library.Notify then
                     Library:Notify({
                         Title    = "Anti-Fling Plus",
                         Content  = value and "Protection Enabled" or "Protection Disabled",
@@ -93,23 +77,7 @@ if Library then
             end
         })
 
-        MainTab:AddToggle({
-            Id       = "heavy_density_toggle",
-            Title    = "Heavy Body Mass Density",
-            Default  = false,
-            Callback = function(value)
-                heavyPhysActive = value
-                if Library.Notify then
-                    Library:Notify({
-                        Title    = "Anti-Fling Plus",
-                        Content  = value and "Heavy Mass ON" or "Heavy Mass OFF",
-                        Duration = 2
-                    })
-                end
-            end
-        })
-
-        if Library.Notify then
+        if Library and Library.Notify then
             Library:Notify({
                 Title    = "Anti-Fling Plus",
                 Content  = "Menu Loaded Successfully.",
