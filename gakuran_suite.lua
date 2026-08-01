@@ -1,38 +1,54 @@
 --==============================================================================
--- GAKURAN HUB (AUTO PARRY & PIANO MUSIC) - FAST & LIGHTWEIGHT PURE GUI
--- Built for Matcha Executor
+-- GAKURAN HUB (AUTO PARRY & PIANO MUSIC)
+-- 100% Standalone - Zero External Dependencies - Matcha Safe
 --==============================================================================
 
-local Services = {
-    Players = game:GetService("Players"),
-    RunService = game:GetService("RunService"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    TweenService = game:GetService("TweenService")
-}
+-- Wrap entire script in pcall for safety
+local ok, err = pcall(function()
 
-local LP = Services.Players.LocalPlayer
-local CombatRemote = Services.ReplicatedStorage:FindFirstChild("Shared") 
-    and Services.ReplicatedStorage.Shared:FindFirstChild("Network") 
-    and Services.ReplicatedStorage.Shared.Network:FindFirstChild("CombatClientRemoteEvent")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local RS = game:GetService("ReplicatedStorage")
 
-local PianoRemote = Services.ReplicatedStorage:FindFirstChild("Remotes") 
-    and Services.ReplicatedStorage.Remotes:FindFirstChild("InstrumentPiano")
+local LP = Players.LocalPlayer
 
--- Settings State
-local Flags = {
-    AutoParry = false,
-    ParryDistance = 15,
-    AutoMusic = false,
-    MusicSpeed = 0.1,
-    SongChoice = "Megalovania"
-}
+-- Find combat remote safely
+local CombatRemote
+pcall(function()
+    local shared = RS:FindFirstChild("Shared")
+    if shared then
+        local net = shared:FindFirstChild("Network")
+        if net then
+            CombatRemote = net:FindFirstChild("CombatClientRemoteEvent")
+        end
+    end
+end)
 
--- Built-in Songs
+-- Find piano remote safely
+local PianoRemote
+pcall(function()
+    local remotes = RS:FindFirstChild("Remotes")
+    if remotes then
+        PianoRemote = remotes:FindFirstChild("InstrumentPiano")
+    end
+end)
+
+print("[GAKURAN] CombatRemote: " .. tostring(CombatRemote))
+print("[GAKURAN] PianoRemote: " .. tostring(PianoRemote))
+
+-- State
+local AutoParry = false
+local ParryDistance = 15
+local AutoMusic = false
+local MusicSpeed = 0.12
+
+-- Songs (simple note sequences)
 local Songs = {
-    ["Megalovania"] = "d d D a g f d f g c c D a g f d f g b b D a g f d f g",
-    ["Fur Elise"] = "e D e D e b d c a c e a b e g a b e D e D e b d c a",
-    ["Rush B"] = "a a a f c a f c a e e e f c g f c a"
+    Megalovania = "d d D a g f d f g c c D a g f d f g b b D a g f d f g",
+    FurElise = "e D e D e b d c a c e a b e g a b e D e D e b d c a",
+    RushB = "a a a f c a f c a e e e f c g f c a"
 }
+local CurrentSong = "Megalovania"
 
 --==============================================================================
 -- AUTO PARRY ENGINE
@@ -42,7 +58,6 @@ local parryCooldown = false
 local function performParry()
     if parryCooldown then return end
     parryCooldown = true
-
     pcall(function()
         if CombatRemote then
             CombatRemote:FireServer("Parry")
@@ -51,35 +66,38 @@ local function performParry()
             CombatRemote:FireServer("Block", false)
         end
     end)
-
-    task.delay(0.35, function()
-        parryCooldown = false
-    end)
+    task.delay(0.35, function() parryCooldown = false end)
 end
 
-Services.RunService.Heartbeat:Connect(function()
-    if not Flags.AutoParry then return end
+local parryConn
+parryConn = RunService.Heartbeat:Connect(function()
+    if not AutoParry then return end
     local myChar = LP.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+    if not myChar then return end
+    local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    local myPos = myHrp.Position
 
-    local myPos = myChar.HumanoidRootPart.Position
-
-    for _, enemy in pairs(Services.Players:GetPlayers()) do
-        if enemy ~= LP and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
-            local enemyHrp = enemy.Character.HumanoidRootPart
-            local dist = (enemyHrp.Position - myPos).Magnitude
-
-            if dist <= Flags.ParryDistance then
-                local enemyHum = enemy.Character:FindFirstChildOfClass("Humanoid")
-                if enemyHum then
-                    local animator = enemyHum:FindFirstChildOfClass("Animator")
-                    if animator then
-                        for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-                            local animName = track.Animation and track.Animation.Name:lower() or ""
-                            if animName:find("m1") or animName:find("m2") or animName:find("attack") or animName:find("hit") or animName:find("punch") or animName:find("swing") then
-                                performParry()
-                                break
-                            end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local eHrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if eHrp then
+                local dist = (eHrp.Position - myPos).Magnitude
+                if dist <= ParryDistance then
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        local animator = hum:FindFirstChildOfClass("Animator")
+                        if animator then
+                            pcall(function()
+                                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                                    local n = ""
+                                    pcall(function() n = track.Animation.Name:lower() end)
+                                    if n:find("m1") or n:find("m2") or n:find("attack") or n:find("hit") or n:find("punch") or n:find("swing") then
+                                        performParry()
+                                        return
+                                    end
+                                end
+                            end)
                         end
                     end
                 end
@@ -89,20 +107,17 @@ Services.RunService.Heartbeat:Connect(function()
 end)
 
 --==============================================================================
--- PIANO AUTO MUSIC PLAYER ENGINE
+-- AUTO MUSIC ENGINE
 --==============================================================================
 task.spawn(function()
-    while true do
-        task.wait(0.1)
-        if Flags.AutoMusic and PianoRemote then
-            local songNotes = Songs[Flags.SongChoice]
-            if songNotes then
-                for note in songNotes:gmatch("%S+") do
-                    if not Flags.AutoMusic then break end
-                    pcall(function()
-                        PianoRemote:FireServer("PlayKey", note)
-                    end)
-                    task.wait(Flags.MusicSpeed)
+    while task.wait(0.1) do
+        if AutoMusic and PianoRemote then
+            local notes = Songs[CurrentSong]
+            if notes then
+                for note in notes:gmatch("%S+") do
+                    if not AutoMusic then break end
+                    pcall(function() PianoRemote:FireServer("PlayKey", note) end)
+                    task.wait(MusicSpeed)
                 end
             end
         end
@@ -110,112 +125,199 @@ task.spawn(function()
 end)
 
 --==============================================================================
--- PURE STANDALONE DARK THEME GUI (NO EXTERNAL LIBRARIES)
+-- GUI - Pure Instance.new, no external libs, no Enums that might be nil
 --==============================================================================
-if game:GetService("CoreGui"):FindFirstChild("GakuranSuiteGui") then
-    game:GetService("CoreGui").GakuranSuiteGui:Destroy()
+
+-- Destroy old GUI if exists
+pcall(function()
+    local old = LP.PlayerGui:FindFirstChild("GakuranHub")
+    if old then old:Destroy() end
+end)
+pcall(function()
+    local cg = game:GetService("CoreGui")
+    local old = cg:FindFirstChild("GakuranHub")
+    if old then old:Destroy() end
+end)
+
+-- Create ScreenGui
+local sg = Instance.new("ScreenGui")
+sg.Name = "GakuranHub"
+sg.ResetOnSpawn = false
+
+-- Try to parent to gethui, CoreGui, or PlayerGui
+local guiOk = false
+pcall(function()
+    if gethui then
+        sg.Parent = gethui()
+        guiOk = true
+    end
+end)
+if not guiOk then
+    pcall(function()
+        sg.Parent = game:GetService("CoreGui")
+        guiOk = true
+    end)
+end
+if not guiOk then
+    pcall(function()
+        sg.Parent = LP.PlayerGui
+        guiOk = true
+    end)
 end
 
-local screen = Instance.new("ScreenGui")
-screen.Name = "GakuranSuiteGui"
-screen.ResetOnSpawn = false
-screen.Parent = (gethui and gethui()) or game:GetService("CoreGui") or LP:WaitForChild("PlayerGui")
+if not guiOk then
+    print("[GAKURAN] ERROR: Could not parent ScreenGui!")
+    return
+end
 
+print("[GAKURAN] GUI parent: " .. tostring(sg.Parent))
+
+-- Main Frame
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 320, 0, 240)
-main.Position = UDim2.new(0.05, 0, 0.25, 0)
-main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+main.Name = "MainFrame"
+main.Size = UDim2.new(0, 310, 0, 260)
+main.Position = UDim2.new(0.05, 0, 0.3, 0)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true
-main.Parent = screen
+main.Parent = sg
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = main
-
-local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1, 0, 0, 38)
-header.Text = "  GAKURAN HUB  |  MATCHA"
-header.Font = Enum.Font.GothamBold
-header.TextSize = 14
-header.TextColor3 = Color3.fromRGB(240, 240, 255)
-header.TextXAlignment = Enum.TextXAlignment.Left
-header.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
-header.Parent = main
-
-local headerCorner = Instance.new("UICorner")
-headerCorner.CornerRadius = UDim.new(0, 8)
-headerCorner.Parent = header
-
--- 1. Auto Parry Toggle
-local btnParry = Instance.new("TextButton")
-btnParry.Size = UDim2.new(0.9, 0, 0, 42)
-btnParry.Position = UDim2.new(0.05, 0, 0.22, 0)
-btnParry.Text = "AUTO PARRY: OFF"
-btnParry.Font = Enum.Font.GothamBold
-btnParry.TextSize = 13
-btnParry.BackgroundColor3 = Color3.fromRGB(180, 50, 60)
-btnParry.TextColor3 = Color3.fromRGB(255, 255, 255)
-btnParry.Parent = main
-
-local btnCorner1 = Instance.new("UICorner")
-btnCorner1.CornerRadius = UDim.new(0, 6)
-btnCorner1.Parent = btnParry
-
-btnParry.MouseButton1Click:Connect(function()
-    Flags.AutoParry = not Flags.AutoParry
-    btnParry.Text = "AUTO PARRY: " .. (Flags.AutoParry and "ON" or "OFF")
-    btnParry.BackgroundColor3 = Flags.AutoParry and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(180, 50, 60)
+pcall(function()
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 10)
+    c.Parent = main
 end)
 
--- 2. Auto Music Toggle
-local btnMusic = Instance.new("TextButton")
-btnMusic.Size = UDim2.new(0.9, 0, 0, 42)
-btnMusic.Position = UDim2.new(0.05, 0, 0.44, 0)
-btnMusic.Text = "AUTO PIANO MUSIC: OFF"
-btnMusic.Font = Enum.Font.GothamBold
-btnMusic.TextSize = 13
-btnMusic.BackgroundColor3 = Color3.fromRGB(180, 50, 60)
-btnMusic.TextColor3 = Color3.fromRGB(255, 255, 255)
-btnMusic.Parent = main
+-- Header
+local hdr = Instance.new("TextLabel")
+hdr.Name = "Header"
+hdr.Size = UDim2.new(1, 0, 0, 36)
+hdr.Position = UDim2.new(0, 0, 0, 0)
+hdr.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+hdr.BorderSizePixel = 0
+hdr.Text = "  GAKURAN HUB  |  MATCHA"
+hdr.TextColor3 = Color3.fromRGB(230, 230, 255)
+hdr.TextSize = 14
+hdr.TextXAlignment = Enum.TextXAlignment.Left
+pcall(function() hdr.Font = Enum.Font.GothamBold end)
+hdr.Parent = main
 
-local btnCorner2 = Instance.new("UICorner")
-btnCorner2.CornerRadius = UDim.new(0, 6)
-btnCorner2.Parent = btnMusic
-
-btnMusic.MouseButton1Click:Connect(function()
-    Flags.AutoMusic = not Flags.AutoMusic
-    btnMusic.Text = "AUTO PIANO MUSIC: " .. (Flags.AutoMusic and "ON" or "OFF")
-    btnMusic.BackgroundColor3 = Flags.AutoMusic and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(180, 50, 60)
+pcall(function()
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 10)
+    c.Parent = hdr
 end)
 
--- 3. Manual Test Parry Button
-local btnTest = Instance.new("TextButton")
-btnTest.Size = UDim2.new(0.9, 0, 0, 36)
-btnTest.Position = UDim2.new(0.05, 0, 0.66, 0)
-btnTest.Text = "MANUAL TEST PARRY"
-btnTest.Font = Enum.Font.GothamMedium
-btnTest.TextSize = 12
-btnTest.BackgroundColor3 = Color3.fromRGB(45, 50, 70)
-btnTest.TextColor3 = Color3.fromRGB(220, 220, 240)
-btnTest.Parent = main
+-- Helper: create a toggle button
+local function makeToggle(name, yOffset, labelOn, labelOff, callback)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0.9, 0, 0, 40)
+    btn.Position = UDim2.new(0.05, 0, 0, yOffset)
+    btn.BackgroundColor3 = Color3.fromRGB(160, 45, 55)
+    btn.BorderSizePixel = 0
+    btn.Text = labelOff
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 13
+    pcall(function() btn.Font = Enum.Font.GothamBold end)
+    btn.Parent = main
 
-local btnCorner3 = Instance.new("UICorner")
-btnCorner3.CornerRadius = UDim.new(0, 6)
-btnCorner3.Parent = btnTest
+    pcall(function()
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 6)
+        c.Parent = btn
+    end)
 
-btnTest.MouseButton1Click:Connect(function()
+    local state = false
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = state and labelOn or labelOff
+        btn.BackgroundColor3 = state and Color3.fromRGB(35, 150, 80) or Color3.fromRGB(160, 45, 55)
+        callback(state)
+    end)
+    return btn
+end
+
+-- Toggle: Auto Parry
+makeToggle("ParryBtn", 44, "AUTO PARRY: ON", "AUTO PARRY: OFF", function(v)
+    AutoParry = v
+    print("[GAKURAN] Auto Parry: " .. tostring(v))
+end)
+
+-- Toggle: Auto Music
+makeToggle("MusicBtn", 92, "AUTO MUSIC: ON", "AUTO MUSIC: OFF", function(v)
+    AutoMusic = v
+    print("[GAKURAN] Auto Music: " .. tostring(v))
+end)
+
+-- Manual Test Parry Button
+local testBtn = Instance.new("TextButton")
+testBtn.Name = "TestBtn"
+testBtn.Size = UDim2.new(0.9, 0, 0, 34)
+testBtn.Position = UDim2.new(0.05, 0, 0, 140)
+testBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+testBtn.BorderSizePixel = 0
+testBtn.Text = "MANUAL TEST PARRY"
+testBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+testBtn.TextSize = 12
+pcall(function() testBtn.Font = Enum.Font.GothamMedium end)
+testBtn.Parent = main
+
+pcall(function()
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = testBtn
+end)
+
+testBtn.MouseButton1Click:Connect(function()
     performParry()
+    print("[GAKURAN] Manual parry fired!")
+end)
+
+-- Close Button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "CloseBtn"
+closeBtn.Size = UDim2.new(0, 28, 0, 28)
+closeBtn.Position = UDim2.new(1, -32, 0, 4)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextSize = 14
+pcall(function() closeBtn.Font = Enum.Font.GothamBold end)
+closeBtn.Parent = main
+
+pcall(function()
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 14)
+    c.Parent = closeBtn
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    AutoParry = false
+    AutoMusic = false
+    pcall(function() parryConn:Disconnect() end)
+    sg:Destroy()
+    print("[GAKURAN] Hub closed.")
 end)
 
 -- Status Footer
 local footer = Instance.new("TextLabel")
-footer.Size = UDim2.new(1, 0, 0, 24)
-footer.Position = UDim2.new(0, 0, 0.88, 0)
-footer.Text = "Status: Operational (Matcha VM)"
-footer.Font = Enum.Font.Gotham
-footer.TextSize = 10
-footer.TextColor3 = Color3.fromRGB(140, 140, 160)
+footer.Name = "Footer"
+footer.Size = UDim2.new(1, 0, 0, 22)
+footer.Position = UDim2.new(0, 0, 1, -24)
 footer.BackgroundTransparency = 1
+footer.Text = "Combat: " .. (CombatRemote and "Found" or "NOT FOUND") .. " | Piano: " .. (PianoRemote and "Found" or "NOT FOUND")
+footer.TextColor3 = Color3.fromRGB(120, 120, 145)
+footer.TextSize = 10
+pcall(function() footer.Font = Enum.Font.Gotham end)
 footer.Parent = main
+
+print("[GAKURAN] Hub loaded successfully!")
+
+end) -- end of main pcall
+
+if not ok then
+    print("[GAKURAN] SCRIPT ERROR: " .. tostring(err))
+end
