@@ -1,34 +1,13 @@
 --==============================================================================
--- GAKURAN SCRIPT SUITE (AUTO PARRY & PIANO MUSIC PLAYER)
--- Built for Matcha Executor & WabiSabi UI Library
+-- GAKURAN HUB (AUTO PARRY & PIANO MUSIC) - FAST & LIGHTWEIGHT PURE GUI
+-- Built for Matcha Executor
 --==============================================================================
-
-local WabiSabiRaw = game:HttpGet("https://scripts.wabisabi.mom/wabi-sabi-ui-lib.lua")
-local WabiSabi = loadstring(WabiSabiRaw)()
-
--- Fallback if table returned directly or inside module
-local UI = WabiSabi
-if type(WabiSabi) == "table" and WabiSabi.CreateWindow then
-    UI = WabiSabi
-elseif type(WabiSabi) == "table" and WabiSabi.Library then
-    UI = WabiSabi.Library
-end
-
--- Fallback simple custom GUI if WabiSabi fails to load in Matcha environment
-local Window
-if UI and UI.CreateWindow then
-    Window = UI:CreateWindow({
-        Title = "Gakuran Hub | Auto Parry & Music",
-        Size = UDim2.new(0, 480, 0, 360),
-        Theme = "Dark"
-    })
-end
 
 local Services = {
     Players = game:GetService("Players"),
     RunService = game:GetService("RunService"),
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    Workspace = game:GetService("Workspace")
+    TweenService = game:GetService("TweenService")
 }
 
 local LP = Services.Players.LocalPlayer
@@ -48,7 +27,7 @@ local Flags = {
     SongChoice = "Megalovania"
 }
 
--- Built-in Songs (Piano Key Notes)
+-- Built-in Songs
 local Songs = {
     ["Megalovania"] = "d d D a g f d f g c c D a g f d f g b b D a g f d f g",
     ["Fur Elise"] = "e D e D e b d c a c e a b e g a b e D e D e b d c a",
@@ -131,91 +110,112 @@ task.spawn(function()
 end)
 
 --==============================================================================
--- GUI CREATION (WabiSabi OR Pure ScreenGui Fallback)
+-- PURE STANDALONE DARK THEME GUI (NO EXTERNAL LIBRARIES)
 --==============================================================================
-if Window then
-    local CombatTab = Window:CreateTab({ Name = "Combat" })
-
-    CombatTab:CreateToggle({
-        Title = "Enable Auto Parry",
-        Default = false,
-        Callback = function(Value) Flags.AutoParry = Value end
-    })
-
-    CombatTab:CreateSlider({
-        Title = "Parry Distance Range",
-        Min = 5, Max = 30, Default = 15,
-        Callback = function(Value) Flags.ParryDistance = Value end
-    })
-
-    CombatTab:CreateButton({
-        Title = "Manual Test Parry",
-        Callback = function() performParry() end
-    })
-
-    local MusicTab = Window:CreateTab({ Name = "Auto Music" })
-
-    MusicTab:CreateToggle({
-        Title = "Enable Auto Play Music",
-        Default = false,
-        Callback = function(Value) Flags.AutoMusic = Value end
-    })
-
-    MusicTab:CreateDropdown({
-        Title = "Select Song",
-        Options = {"Megalovania", "Fur Elise", "Rush B"},
-        Default = "Megalovania",
-        Callback = function(Value) Flags.SongChoice = Value end
-    })
-else
-    -- Pure ScreenGui Fallback if WabiSabi library loadstring failed
-    local screen = Instance.new("ScreenGui")
-    screen.Name = "GakuranGui"
-    screen.ResetOnSpawn = false
-    
-    local CoreGui = game:GetService("CoreGui")
-    screen.Parent = (gethui and gethui()) or CoreGui or LP:WaitForChild("PlayerGui")
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 220, 0, 180)
-    frame.Position = UDim2.new(0.05, 0, 0.3, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    frame.Active = true
-    frame.Draggable = true
-    frame.Parent = screen
-
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.Text = "Gakuran Hub"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-    title.Parent = frame
-
-    local btnParry = Instance.new("TextButton")
-    btnParry.Size = UDim2.new(0.9, 0, 0, 35)
-    btnParry.Position = UDim2.new(0.05, 0, 0.25, 0)
-    btnParry.Text = "Auto Parry: OFF"
-    btnParry.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-    btnParry.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btnParry.Parent = frame
-
-    btnParry.MouseButton1Click:Connect(function()
-        Flags.AutoParry = not Flags.AutoParry
-        btnParry.Text = "Auto Parry: " .. (Flags.AutoParry and "ON" or "OFF")
-        btnParry.BackgroundColor3 = Flags.AutoParry and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-    end)
-
-    local btnMusic = Instance.new("TextButton")
-    btnMusic.Size = UDim2.new(0.9, 0, 0, 35)
-    btnMusic.Position = UDim2.new(0.05, 0, 0.55, 0)
-    btnMusic.Text = "Auto Music: OFF"
-    btnMusic.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-    btnMusic.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btnMusic.Parent = frame
-
-    btnMusic.MouseButton1Click:Connect(function()
-        Flags.AutoMusic = not Flags.AutoMusic
-        btnMusic.Text = "Auto Music: " .. (Flags.AutoMusic and "ON" or "OFF")
-        btnMusic.BackgroundColor3 = Flags.AutoMusic and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-    end)
+if game:GetService("CoreGui"):FindFirstChild("GakuranSuiteGui") then
+    game:GetService("CoreGui").GakuranSuiteGui:Destroy()
 end
+
+local screen = Instance.new("ScreenGui")
+screen.Name = "GakuranSuiteGui"
+screen.ResetOnSpawn = false
+screen.Parent = (gethui and gethui()) or game:GetService("CoreGui") or LP:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 320, 0, 240)
+main.Position = UDim2.new(0.05, 0, 0.25, 0)
+main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.Parent = screen
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = main
+
+local header = Instance.new("TextLabel")
+header.Size = UDim2.new(1, 0, 0, 38)
+header.Text = "  GAKURAN HUB  |  MATCHA"
+header.Font = Enum.Font.GothamBold
+header.TextSize = 14
+header.TextColor3 = Color3.fromRGB(240, 240, 255)
+header.TextXAlignment = Enum.TextXAlignment.Left
+header.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+header.Parent = main
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 8)
+headerCorner.Parent = header
+
+-- 1. Auto Parry Toggle
+local btnParry = Instance.new("TextButton")
+btnParry.Size = UDim2.new(0.9, 0, 0, 42)
+btnParry.Position = UDim2.new(0.05, 0, 0.22, 0)
+btnParry.Text = "AUTO PARRY: OFF"
+btnParry.Font = Enum.Font.GothamBold
+btnParry.TextSize = 13
+btnParry.BackgroundColor3 = Color3.fromRGB(180, 50, 60)
+btnParry.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnParry.Parent = main
+
+local btnCorner1 = Instance.new("UICorner")
+btnCorner1.CornerRadius = UDim.new(0, 6)
+btnCorner1.Parent = btnParry
+
+btnParry.MouseButton1Click:Connect(function()
+    Flags.AutoParry = not Flags.AutoParry
+    btnParry.Text = "AUTO PARRY: " .. (Flags.AutoParry and "ON" or "OFF")
+    btnParry.BackgroundColor3 = Flags.AutoParry and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(180, 50, 60)
+end)
+
+-- 2. Auto Music Toggle
+local btnMusic = Instance.new("TextButton")
+btnMusic.Size = UDim2.new(0.9, 0, 0, 42)
+btnMusic.Position = UDim2.new(0.05, 0, 0.44, 0)
+btnMusic.Text = "AUTO PIANO MUSIC: OFF"
+btnMusic.Font = Enum.Font.GothamBold
+btnMusic.TextSize = 13
+btnMusic.BackgroundColor3 = Color3.fromRGB(180, 50, 60)
+btnMusic.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnMusic.Parent = main
+
+local btnCorner2 = Instance.new("UICorner")
+btnCorner2.CornerRadius = UDim.new(0, 6)
+btnCorner2.Parent = btnMusic
+
+btnMusic.MouseButton1Click:Connect(function()
+    Flags.AutoMusic = not Flags.AutoMusic
+    btnMusic.Text = "AUTO PIANO MUSIC: " .. (Flags.AutoMusic and "ON" or "OFF")
+    btnMusic.BackgroundColor3 = Flags.AutoMusic and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(180, 50, 60)
+end)
+
+-- 3. Manual Test Parry Button
+local btnTest = Instance.new("TextButton")
+btnTest.Size = UDim2.new(0.9, 0, 0, 36)
+btnTest.Position = UDim2.new(0.05, 0, 0.66, 0)
+btnTest.Text = "MANUAL TEST PARRY"
+btnTest.Font = Enum.Font.GothamMedium
+btnTest.TextSize = 12
+btnTest.BackgroundColor3 = Color3.fromRGB(45, 50, 70)
+btnTest.TextColor3 = Color3.fromRGB(220, 220, 240)
+btnTest.Parent = main
+
+local btnCorner3 = Instance.new("UICorner")
+btnCorner3.CornerRadius = UDim.new(0, 6)
+btnCorner3.Parent = btnTest
+
+btnTest.MouseButton1Click:Connect(function()
+    performParry()
+end)
+
+-- Status Footer
+local footer = Instance.new("TextLabel")
+footer.Size = UDim2.new(1, 0, 0, 24)
+footer.Position = UDim2.new(0, 0, 0.88, 0)
+footer.Text = "Status: Operational (Matcha VM)"
+footer.Font = Enum.Font.Gotham
+footer.TextSize = 10
+footer.TextColor3 = Color3.fromRGB(140, 140, 160)
+footer.BackgroundTransparency = 1
+footer.Parent = main
