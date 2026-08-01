@@ -3,15 +3,26 @@
 -- Built for Matcha Executor & WabiSabi UI Library
 --==============================================================================
 
--- 1. Load WabiSabi UI Library
-local WabiSabi = loadstring(game:HttpGet("https://scripts.wabisabi.mom/wabi-sabi-ui-lib.lua"))()
+local WabiSabiRaw = game:HttpGet("https://scripts.wabisabi.mom/wabi-sabi-ui-lib.lua")
+local WabiSabi = loadstring(WabiSabiRaw)()
 
--- Create Main Window
-local Window = WabiSabi:CreateWindow({
-    Title = "Gakuran Hub | Auto Parry & Music",
-    Size = UDim2.new(0, 480, 0, 360),
-    Theme = "Dark"
-})
+-- Fallback if table returned directly or inside module
+local UI = WabiSabi
+if type(WabiSabi) == "table" and WabiSabi.CreateWindow then
+    UI = WabiSabi
+elseif type(WabiSabi) == "table" and WabiSabi.Library then
+    UI = WabiSabi.Library
+end
+
+-- Fallback simple custom GUI if WabiSabi fails to load in Matcha environment
+local Window
+if UI and UI.CreateWindow then
+    Window = UI:CreateWindow({
+        Title = "Gakuran Hub | Auto Parry & Music",
+        Size = UDim2.new(0, 480, 0, 360),
+        Theme = "Dark"
+    })
+end
 
 local Services = {
     Players = game:GetService("Players"),
@@ -45,8 +56,7 @@ local Songs = {
 }
 
 --==============================================================================
--- 2. AUTO PARRY ENGINE
--- Detects enemy combat animations & distance, triggers parry
+-- AUTO PARRY ENGINE
 --==============================================================================
 local parryCooldown = false
 
@@ -99,19 +109,8 @@ Services.RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Detect Combat Remote Events directly from server
-if CombatRemote then
-    CombatRemote.OnClientEvent:Connect(function(...)
-        if not Flags.AutoParry then return end
-        local args = {...}
-        if type(args[1]) == "string" and (args[1]:lower():find("attack") or args[1]:lower():find("swing")) then
-            performParry()
-        end
-    end)
-end
-
 --==============================================================================
--- 3. PIANO AUTO MUSIC PLAYER ENGINE
+-- PIANO AUTO MUSIC PLAYER ENGINE
 --==============================================================================
 task.spawn(function()
     while true do
@@ -132,70 +131,91 @@ task.spawn(function()
 end)
 
 --==============================================================================
--- 4. GUI TAB STRUCTURE
+-- GUI CREATION (WabiSabi OR Pure ScreenGui Fallback)
 --==============================================================================
+if Window then
+    local CombatTab = Window:CreateTab({ Name = "Combat" })
 
--- Tab 1: Combat Options
-local CombatTab = Window:CreateTab({ Name = "Combat" })
+    CombatTab:CreateToggle({
+        Title = "Enable Auto Parry",
+        Default = false,
+        Callback = function(Value) Flags.AutoParry = Value end
+    })
 
-CombatTab:CreateToggle({
-    Title = "Enable Auto Parry",
-    Default = false,
-    Callback = function(Value)
-        Flags.AutoParry = Value
-    end
-})
+    CombatTab:CreateSlider({
+        Title = "Parry Distance Range",
+        Min = 5, Max = 30, Default = 15,
+        Callback = function(Value) Flags.ParryDistance = Value end
+    })
 
-CombatTab:CreateSlider({
-    Title = "Parry Distance Range (Studs)",
-    Min = 5,
-    Max = 30,
-    Default = 15,
-    Callback = function(Value)
-        Flags.ParryDistance = Value
-    end
-})
+    CombatTab:CreateButton({
+        Title = "Manual Test Parry",
+        Callback = function() performParry() end
+    })
 
-CombatTab:CreateButton({
-    Title = "Manual Test Parry",
-    Callback = function()
-        performParry()
-    end
-})
+    local MusicTab = Window:CreateTab({ Name = "Auto Music" })
 
--- Tab 2: Auto Music Player
-local MusicTab = Window:CreateTab({ Name = "Auto Music" })
+    MusicTab:CreateToggle({
+        Title = "Enable Auto Play Music",
+        Default = false,
+        Callback = function(Value) Flags.AutoMusic = Value end
+    })
 
-MusicTab:CreateToggle({
-    Title = "Enable Auto Play Music",
-    Default = false,
-    Callback = function(Value)
-        Flags.AutoMusic = Value
-    end
-})
+    MusicTab:CreateDropdown({
+        Title = "Select Song",
+        Options = {"Megalovania", "Fur Elise", "Rush B"},
+        Default = "Megalovania",
+        Callback = function(Value) Flags.SongChoice = Value end
+    })
+else
+    -- Pure ScreenGui Fallback if WabiSabi library loadstring failed
+    local screen = Instance.new("ScreenGui")
+    screen.Name = "GakuranGui"
+    screen.ResetOnSpawn = false
+    
+    local CoreGui = game:GetService("CoreGui")
+    screen.Parent = (gethui and gethui()) or CoreGui or LP:WaitForChild("PlayerGui")
 
-MusicTab:CreateDropdown({
-    Title = "Select Song",
-    Options = {"Megalovania", "Fur Elise", "Rush B"},
-    Default = "Megalovania",
-    Callback = function(Value)
-        Flags.SongChoice = Value
-    end
-})
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 220, 0, 180)
+    frame.Position = UDim2.new(0.05, 0, 0.3, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = screen
 
-MusicTab:CreateSlider({
-    Title = "Note Speed (Seconds)",
-    Min = 0.05,
-    Max = 0.5,
-    Default = 0.1,
-    Callback = function(Value)
-        Flags.MusicSpeed = Value
-    end
-})
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Text = "Gakuran Hub"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    title.Parent = frame
 
--- Notification
-WabiSabi:Notify({
-    Title = "Gakuran Suite Loaded",
-    Content = "Auto Parry & Auto Music ready!",
-    Duration = 4
-})
+    local btnParry = Instance.new("TextButton")
+    btnParry.Size = UDim2.new(0.9, 0, 0, 35)
+    btnParry.Position = UDim2.new(0.05, 0, 0.25, 0)
+    btnParry.Text = "Auto Parry: OFF"
+    btnParry.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    btnParry.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnParry.Parent = frame
+
+    btnParry.MouseButton1Click:Connect(function()
+        Flags.AutoParry = not Flags.AutoParry
+        btnParry.Text = "Auto Parry: " .. (Flags.AutoParry and "ON" or "OFF")
+        btnParry.BackgroundColor3 = Flags.AutoParry and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+    end)
+
+    local btnMusic = Instance.new("TextButton")
+    btnMusic.Size = UDim2.new(0.9, 0, 0, 35)
+    btnMusic.Position = UDim2.new(0.05, 0, 0.55, 0)
+    btnMusic.Text = "Auto Music: OFF"
+    btnMusic.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    btnMusic.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnMusic.Parent = frame
+
+    btnMusic.MouseButton1Click:Connect(function()
+        Flags.AutoMusic = not Flags.AutoMusic
+        btnMusic.Text = "Auto Music: " .. (Flags.AutoMusic and "ON" or "OFF")
+        btnMusic.BackgroundColor3 = Flags.AutoMusic and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+    end)
+end
