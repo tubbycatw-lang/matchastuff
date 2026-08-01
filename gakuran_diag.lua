@@ -1,39 +1,51 @@
 --==============================================================================
--- GAKURAN ULTRA-STRICT PROBE (REPLICATEDSTORAGE CHILDREN ONLY)
+-- MATCHA / GAKURAN REPLICATEDSTORAGE & LOCALPLAYER STRUCT DUMPER
 --==============================================================================
 
-print("=== GAKURAN CLEAN PROBE START ===")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local LP = Players.LocalPlayer
+local setclipboard = setclipboard or set_clipboard or toclipboard or (Syn and Syn.write_clipboard)
 
-print("\n--- REPLICATEDSTORAGE ROOT ITEMS ---")
-for _, v in pairs(ReplicatedStorage:GetChildren()) do
-    if not v.Name:find("Kohl") and not v.Name:find("Cmdr") then
-        print("  [" .. v.ClassName .. "] game.ReplicatedStorage." .. v.Name)
-        -- Print 1 level down if it's a folder/model
-        if v:IsA("Folder") or v:IsA("Model") then
-            for _, sub in pairs(v:GetChildren()) do
-                if not sub.Name:find("Kohl") and not sub.Name:find("Cmdr") and not sub.Name:find("VIP") then
-                    print("     ↳ [" .. sub.ClassName .. "] " .. sub.Name)
-                end
+local function getHierarchy(parent, indent, maxDepth, currentDepth)
+    currentDepth = currentDepth or 1
+    indent = indent or ""
+    if currentDepth > maxDepth then return "" end
+
+    local str = ""
+    for _, child in ipairs(parent:GetChildren()) do
+        local cName = child.Name
+        local cClass = child.ClassName
+
+        -- Skip Kohl's Admin and Cmdr noise
+        if not cName:find("Kohl") and not cName:find("Cmdr") and not cName:find("VIP") and cName ~= "AlphaWings" then
+            str = str .. indent .. "[" .. cClass .. "] " .. cName .. "\n"
+            if #child:GetChildren() > 0 and currentDepth < maxDepth then
+                str = str .. getHierarchy(child, indent .. "  ", maxDepth, currentDepth + 1)
             end
         end
     end
+    return str
 end
 
-print("\n--- MY CHARACTER TOOLS & ITEMS ---")
-if LP.Character then
-    for _, item in pairs(LP.Character:GetChildren()) do
-        print("  [" .. item.ClassName .. "] " .. item.Name)
-    end
-end
+local dump = "=== GAKURAN GAME STRUCTURE DUMP ===\n\n"
 
-print("\n--- MY BACKPACK ITEMS ---")
+dump = dump .. "--- REPLICATEDSTORAGE ---\n"
+dump = dump .. getHierarchy(game:GetService("ReplicatedStorage"), "  ", 3) .. "\n"
+
+local LP = game:GetService("Players").LocalPlayer
+dump = dump .. "--- LOCALPLAYER BACKPACK ---\n"
 if LP:FindFirstChild("Backpack") then
-    for _, item in pairs(LP.Backpack:GetChildren()) do
-        print("  [" .. item.ClassName .. "] " .. item.Name)
-    end
+    dump = dump .. getHierarchy(LP.Backpack, "  ", 3) .. "\n"
 end
 
-print("=== GAKURAN CLEAN PROBE END ===")
+dump = dump .. "--- LOCALPLAYER CHARACTER ---\n"
+if LP.Character then
+    dump = dump .. getHierarchy(LP.Character, "  ", 3) .. "\n"
+end
+
+print(dump)
+
+if setclipboard then
+    setclipboard(dump)
+    print("SUCCESS: Full structure dumped and COPIED TO YOUR CLIPBOARD! Press Ctrl+V to paste here.")
+else
+    print("FINISHED DUMPING TO CONSOLE.")
+end
